@@ -6,7 +6,6 @@ import regex as re
 import requests
 import torch
 
-
 def bytes_to_unicode() -> Dict[int, str]:
     """Build a reversible mapping from byte values to unicode characters.
 
@@ -43,7 +42,6 @@ def bytes_to_unicode() -> Dict[int, str]:
 
     return byte_to_unicode_map
 
-
 def get_pairs(symbols: Tuple[str, ...]) -> Set[Tuple[str, str]]:
     """Return adjacent symbol pairs in a token.
 
@@ -65,7 +63,6 @@ def get_pairs(symbols: Tuple[str, ...]) -> Set[Tuple[str, str]]:
 
     return pairs
 
-
 def get_file(local_file: str, remote_file: str) -> None:
     """Download a remote file to disk if it does not already exist.
 
@@ -82,7 +79,6 @@ def get_file(local_file: str, remote_file: str) -> None:
 
     with open(local_file, "wb") as file_handle:
         file_handle.write(response.content)
-
 
 def get_encoder() -> "Encoder":
     """Load GPT-2 tokenizer assets and return an initialized Encoder.
@@ -130,7 +126,6 @@ def get_encoder() -> "Encoder":
     assert len(bpe_merges) == 50000
 
     return Encoder(encoder=encoder, bpe_merges=bpe_merges)
-
 
 class Encoder:
     """GPT-2 style BPE encoder/decoder."""
@@ -339,7 +334,6 @@ class Encoder:
         raw_bytes = bytearray(byte_values)
         decoded_text = raw_bytes.decode("utf-8", errors="replace")
         return decoded_text
-
 
 class BPETokenizer:
     """Wrap an Encoder and emit PyTorch tensors for model inputs."""
