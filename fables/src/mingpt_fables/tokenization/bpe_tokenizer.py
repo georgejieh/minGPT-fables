@@ -87,7 +87,7 @@ def get_encoder() -> "Encoder":
         An Encoder initialized with GPT-2's encoder.json and vocab.bpe merges.
     """
     home_dir = os.path.expanduser("~")
-    cache_dir = os.path.join(home_dir, ".cache", "mingpt")
+    cache_dir = os.path.join(home_dir, ".cache", "mingpt_fables")
     os.makedirs(cache_dir, exist_ok=True)
 
     encoder_local_file = os.path.join(cache_dir, "encoder.json")
