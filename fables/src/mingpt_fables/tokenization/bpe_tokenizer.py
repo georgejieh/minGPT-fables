@@ -6,14 +6,15 @@ import regex as re
 import requests
 import torch
 
+
 def bytes_to_unicode() -> Dict[int, str]:
-    """Build a reversible mapping from byte values to unicode characters.
+    """Builds a reversible mapping from byte values to unicode characters.
 
     Returns:
-        A mapping from byte values (0-255) to unicode characters used by the
-        GPT-2 byte fallback scheme.
+        Mapping from byte values (0-255) to unicode characters.
     """
-    safe_byte_values = []
+    safe_byte_values: List[int] = []
+
     for byte_value in range(ord("!"), ord("~") + 1):
         safe_byte_values.append(byte_value)
     for byte_value in range(ord("¡"), ord("¬") + 1):
@@ -21,7 +22,7 @@ def bytes_to_unicode() -> Dict[int, str]:
     for byte_value in range(ord("®"), ord("ÿ") + 1):
         safe_byte_values.append(byte_value)
 
-    safe_unicode_codepoints = []
+    safe_unicode_codepoints: List[int] = []
     for byte_value in safe_byte_values:
         safe_unicode_codepoints.append(byte_value)
 
@@ -32,43 +33,46 @@ def bytes_to_unicode() -> Dict[int, str]:
             safe_unicode_codepoints.append(256 + extra_codepoint_offset)
             extra_codepoint_offset += 1
 
-    unicode_chars = []
+    unicode_chars: List[str] = []
     for codepoint in safe_unicode_codepoints:
         unicode_chars.append(chr(codepoint))
 
-    byte_to_unicode_map = {}
-    for byte_value, unicode_char in zip(safe_byte_values, unicode_chars):
+    byte_to_unicode_map: Dict[int, str] = {}
+    for i in range(len(safe_byte_values)):
+        byte_value = safe_byte_values[i]
+        unicode_char = unicode_chars[i]
         byte_to_unicode_map[byte_value] = unicode_char
 
     return byte_to_unicode_map
 
+
 def get_pairs(symbols: Tuple[str, ...]) -> Set[Tuple[str, str]]:
-    """Return adjacent symbol pairs in a token.
+    """Returns adjacent symbol pairs in a token.
 
     Args:
-        symbols: A token represented as a tuple of string symbols.
+        symbols: Token as a tuple of symbols.
 
     Returns:
-        A set of (symbol_i, symbol_{i+1}) pairs.
+        Set of consecutive symbol pairs.
     """
-    if len(symbols) < 2:
-        return set()
-
     pairs: Set[Tuple[str, str]] = set()
-    previous_symbol = symbols[0]
+    if len(symbols) < 2:
+        return pairs
 
+    prev_symbol = symbols[0]
     for symbol in symbols[1:]:
-        pairs.add((previous_symbol, symbol))
-        previous_symbol = symbol
+        pairs.add((prev_symbol, symbol))
+        prev_symbol = symbol
 
     return pairs
 
+
 def get_file(local_file: str, remote_file: str) -> None:
-    """Download a remote file to disk if it does not already exist.
+    """Downloads a file if it does not exist locally.
 
     Args:
-        local_file: Destination path on the local filesystem.
-        remote_file: URL of the remote file to download.
+        local_file: Destination path.
+        remote_file: Source URL.
     """
     if os.path.isfile(local_file):
         return
@@ -80,12 +84,9 @@ def get_file(local_file: str, remote_file: str) -> None:
     with open(local_file, "wb") as file_handle:
         file_handle.write(response.content)
 
-def get_encoder() -> "Encoder":
-    """Load GPT-2 tokenizer assets and return an initialized Encoder.
 
-    Returns:
-        An Encoder initialized with GPT-2's encoder.json and vocab.bpe merges.
-    """
+def get_encoder() -> "Encoder":
+    """Loads GPT-2 BPE assets and returns an Encoder."""
     home_dir = os.path.expanduser("~")
     cache_dir = os.path.join(home_dir, ".cache", "mingpt_fables")
     os.makedirs(cache_dir, exist_ok=True)
@@ -100,7 +101,7 @@ def get_encoder() -> "Encoder":
     with open(encoder_local_file, "r", encoding="utf-8") as file_handle:
         encoder = json.load(file_handle)
 
-    # GPT-2 tokenizer vocab size.
+    # GPT-2 vocab size.
     assert len(encoder) == 50257
 
     vocab_local_file = os.path.join(cache_dir, "vocab.bpe")
@@ -115,17 +116,17 @@ def get_encoder() -> "Encoder":
 
     bpe_merges: List[Tuple[str, str]] = []
     merge_lines = bpe_data.split("\n")[1:-1]
-
     for merge_line in merge_lines:
         parts = merge_line.split()
         if len(parts) != 2:
             continue
         bpe_merges.append((parts[0], parts[1]))
 
-    # GPT-2 BPE merge rules count.
+    # GPT-2 merge count.
     assert len(bpe_merges) == 50000
 
     return Encoder(encoder=encoder, bpe_merges=bpe_merges)
+
 
 class Encoder:
     """GPT-2 style BPE encoder/decoder."""
@@ -135,11 +136,11 @@ class Encoder:
         encoder: Mapping[str, int],
         bpe_merges: Sequence[Tuple[str, str]],
     ) -> None:
-        """Initialize an Encoder with token IDs and BPE merge rules.
+        """Initializes encoder.
 
         Args:
-            encoder: Mapping from token strings to integer token IDs.
-            bpe_merges: Ordered sequence of BPE merge pairs.
+            encoder: Mapping from token string to token ID.
+            bpe_merges: Ordered list of merge pairs.
         """
         self.byte_encoder = bytes_to_unicode()
 
@@ -165,13 +166,13 @@ class Encoder:
         self.cache: Dict[str, str] = {}
 
     def bpe(self, token: str) -> str:
-        """Apply BPE merges to a single token.
+        """Applies BPE merges to a single token.
 
         Args:
-            token: A token string to be merged.
+            token: Token string after byte-to-unicode translation.
 
         Returns:
-            A space-delimited string of merged symbols.
+            A space-separated string of merged symbols.
         """
         if token in self.cache:
             return self.cache[token]
@@ -184,21 +185,17 @@ class Encoder:
             return token
 
         while True:
-            best_pair = min(
-                pairs,
-                key=lambda pair: self.bpe_ranks.get(pair, float("inf")),
-            )
-
-            if best_pair not in self.bpe_ranks:
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
+            if bigram not in self.bpe_ranks:
                 break
 
-            first, second = best_pair
+            first_symbol, second_symbol = bigram
             new_word: List[str] = []
             i = 0
 
             while i < len(word):
                 try:
-                    j = word.index(first, i)
+                    j = word.index(first_symbol, i)
                 except ValueError:
                     for tail_symbol in word[i:]:
                         new_word.append(tail_symbol)
@@ -209,15 +206,14 @@ class Encoder:
 
                 i = j
 
-                if i < len(word) - 1 and word[i] == first and word[i + 1] == second:
-                    new_word.append(first + second)
+                if i < len(word) - 1 and word[i] == first_symbol and word[i + 1] == second_symbol:
+                    new_word.append(first_symbol + second_symbol)
                     i += 2
                 else:
                     new_word.append(word[i])
                     i += 1
 
             word = tuple(new_word)
-
             if len(word) == 1:
                 break
 
@@ -228,17 +224,17 @@ class Encoder:
         return merged
 
     def encode(self, text: str) -> List[int]:
-        """Encode a string into a flat list of token IDs.
+        """Encodes text into token IDs.
 
         Args:
-            text: Input text to encode.
+            text: Input text.
 
         Returns:
-            A flat list of integer token IDs.
+            Token IDs.
         """
         assert isinstance(text, str)
 
-        encoded_indices: List[int] = []
+        encoded_ids: List[int] = []
         tokens = re.findall(self.pat, text)
 
         for token in tokens:
@@ -258,71 +254,21 @@ class Encoder:
                 token_ids.append(self.encoder[subtoken])
 
             for token_id in token_ids:
-                encoded_indices.append(token_id)
+                encoded_ids.append(token_id)
 
-        return encoded_indices
+        return encoded_ids
 
-    def encode_and_show_work(self, text: str) -> Dict[str, Any]:
-        """Encode text and return intermediate states for debugging.
-
-        Args:
-            text: Input text to encode.
-
-        Returns:
-            A dictionary containing token IDs and intermediate tokenization steps.
-        """
-        assert isinstance(text, str)
-
-        encoded_indices: List[int] = []
-        token_debug_info: List[Dict[str, Any]] = []
-        tokens = re.findall(self.pat, text)
-
-        for token in tokens:
-            token_bytes = token.encode("utf-8")
-
-            translated_chars: List[str] = []
-            for byte_value in token_bytes:
-                translated_chars.append(self.byte_encoder[byte_value])
-
-            translated_token = "".join(translated_chars)
-
-            merged_token_string = self.bpe(translated_token)
-            merged_tokens = merged_token_string.split(" ")
-
-            token_ids: List[int] = []
-            for subtoken in merged_tokens:
-                token_ids.append(self.encoder[subtoken])
-
-            for token_id in token_ids:
-                encoded_indices.append(token_id)
-
-            token_debug_info.append(
-                {
-                    "token": token,
-                    "token_bytes": token_bytes,
-                    "token_translated": translated_token,
-                    "token_merged": merged_tokens,
-                    "token_ids": token_ids,
-                }
-            )
-
-        return {
-            "bpe_idx": encoded_indices,
-            "tokens": tokens,
-            "parts": token_debug_info,
-        }
-
-    def decode(self, bpe_idx: List[int]) -> str:
-        """Decode a flat list of token IDs into a UTF-8 string.
+    def decode(self, token_ids: List[int]) -> str:
+        """Decodes token IDs into text.
 
         Args:
-            bpe_idx: A flat list of integer token IDs.
+            token_ids: Token IDs.
 
         Returns:
-            The decoded UTF-8 string.
+            Decoded text.
         """
         merged_token_chars: List[str] = []
-        for token_id in bpe_idx:
+        for token_id in token_ids:
             merged_token_chars.append(self.decoder[token_id])
 
         merged_text = "".join(merged_token_chars)
@@ -335,46 +281,43 @@ class Encoder:
         decoded_text = raw_bytes.decode("utf-8", errors="replace")
         return decoded_text
 
+
 class BPETokenizer:
-    """Wrap an Encoder and emit PyTorch tensors for model inputs."""
+    """Tokenizer wrapper that returns torch tensors."""
 
     def __init__(self) -> None:
-        """Initialize the tokenizer by loading GPT-2 tokenizer assets."""
         self.encoder = get_encoder()
 
     def __call__(self, text: str, return_tensors: str = "pt") -> torch.Tensor:
-        """Encode text and return a PyTorch tensor with a batch dimension.
+        """Encodes text and returns a tensor with batch dimension.
 
         Args:
-            text: Input string to encode.
-            return_tensors: Output tensor type. Only "pt" is supported.
+            text: Input text.
+            return_tensors: Must be "pt".
 
         Returns:
-            A torch.LongTensor of shape (1, seq_len).
+            Token ID tensor of shape (1, T).
         """
         assert isinstance(text, str)
         assert return_tensors == "pt"
 
         token_ids = self.encoder.encode(text)
-
-        batched_token_ids: List[List[int]] = []
-        batched_token_ids.append(token_ids)
-
-        output_tensor = torch.tensor(batched_token_ids, dtype=torch.long)
+        batch: List[List[int]] = [token_ids]
+        output_tensor = torch.tensor(batch, dtype=torch.long)
         return output_tensor
 
     def decode(self, idx: torch.Tensor) -> str:
-        """Decode a 1D tensor of token IDs into a string.
+        """Decodes a 1D tensor of token IDs.
 
         Args:
-            idx: A 1D tensor of token IDs.
+            idx: 1D tensor of token IDs.
 
         Returns:
-            The decoded string.
+            Decoded text.
         """
         assert isinstance(idx, torch.Tensor)
         assert idx.ndim == 1
 
-        token_id_list = idx.tolist()
-        decoded_text = self.encoder.decode(token_id_list)
+        token_ids = idx.tolist()
+        decoded_text = self.encoder.decode(token_ids)
         return decoded_text
